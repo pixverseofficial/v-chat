@@ -1,8 +1,11 @@
 import React from 'react';
 import Head from 'next/head';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/router';
 
 export default function Home() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Head>
@@ -28,7 +31,10 @@ export default function Home() {
         </p>
 
         <div className="space-y-4">
-          <button className="apple-button w-full text-lg py-4">
+          <button 
+            onClick={() => router.push('/login')}
+            className="apple-button w-full text-lg py-4"
+          >
             Get Started
           </button>
           <p className="text-sm text-gray-400">Secure. Fast. Minimal.</p>
