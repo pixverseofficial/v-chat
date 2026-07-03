@@ -179,73 +179,85 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold text-gray-800 uppercase tracking-wide">{activeTab}</h2>
         </div>
 
-        {/* Search Results Area */}
-        <div className="p-8 overflow-y-auto flex-1">
-          {/* Pending Requests Section */}
-          {pendingRequests.length > 0 && (
-            <div className="mb-8">
-              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Friend Requests ({pendingRequests.length})</h3>
-              <div className="space-y-3">
-                {pendingRequests.map((request) => (
-                  <div key={request.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 bg-purple-200 rounded-full flex items-center justify-center font-bold text-purple-600">
-                        {request.senderName?.charAt(0) || '?'}
-                      </div>
-                      <div className="ml-4 text-left">
-                        <p className="font-bold text-black">{request.senderName}</p>
-                        <p className="text-xs text-gray-400">Sent you a friend request</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => acceptRequest(request)}
-                      className="p-3 bg-green-500 text-white rounded-2xl hover:scale-105 transition-all"
-                    >
-                      <Check className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
+        {/* Friends Tab Content */}
+        {activeTab === 'friends' && (
+          <div className="flex-1 overflow-y-auto p-8">
+            <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Requests</h3>
+            {pendingRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center mt-10 text-center">
+                <div className="w-20 h-20 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-4 shadow-sm">
+                  <User className="w-10 h-10 text-gray-300" />
+                </div>
+                <p className="text-gray-400 text-lg">No pending requests</p>
+                <p className="text-gray-300 text-sm">When someone sends you a friend request, it will appear here.</p>
               </div>
-            </div>
-          )}
-
-          {/* Search Results */}
-          {searchResults.length > 0 && (
-            <div className="mb-8">
-              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Search Results</h3>
+            ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {searchResults.map((result) => (
-                  <div key={result.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                {pendingRequests.map((req) => (
+                  <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold">{result.username.charAt(0)}</div>
-                      <div className="ml-4 text-left">
-                        <p className="font-bold text-black">{result.username}</p>
-                        <p className="text-xs text-gray-400">V Chat User</p>
+                      <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
+                        {req.senderName?.charAt(0) || '?'}
+                      </div>
+                      <div className="ml-4">
+                        <p className="font-bold text-black">{req.senderName}</p>
+                        <p className="text-xs text-gray-400">wants to be your friend</p>
                       </div>
                     </div>
                     <button 
-                      onClick={() => sendRequest(result)}
-                      className="p-3 bg-[#007AFF] text-white rounded-2xl hover:scale-105 transition-all"
+                      onClick={() => acceptRequest(req)}
+                      className="px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold hover:bg-green-600 transition-all hover:scale-105"
                     >
-                      <UserPlus className="w-5 h-5" />
+                      Accept
                     </button>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {/* Empty State */}
-          {searchResults.length === 0 && pendingRequests.length === 0 && (
-            <div className="flex flex-col items-center justify-center mt-20 text-center">
-              <div className="w-24 h-24 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-6 shadow-sm">
-                <MessageCircle className="w-12 h-12 text-gray-300" />
+        {/* Chats Tab Content (Search Results Area) */}
+        {activeTab === 'chats' && (
+          <div className="flex-1 overflow-y-auto p-8">
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Search Results</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {searchResults.map((result) => (
+                    <div key={result.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold">{result.username.charAt(0)}</div>
+                        <div className="ml-4 text-left">
+                          <p className="font-bold text-black">{result.username}</p>
+                          <p className="text-xs text-gray-400">V Chat User</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => sendRequest(result)}
+                        className="p-3 bg-[#007AFF] text-white rounded-2xl hover:scale-105 transition-all"
+                      >
+                        <UserPlus className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-black">Welcome, {user.displayName}!</h2>
-              <p className="text-gray-500 mt-2 max-w-xs mx-auto">Search for your friends using their username to start chatting.</p>
-            </div>
-          )}
-        </div>
+            )}
+
+            {/* Empty State */}
+            {searchResults.length === 0 && (
+              <div className="flex flex-col items-center justify-center mt-20 text-center">
+                <div className="w-24 h-24 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-6 shadow-sm">
+                  <MessageCircle className="w-12 h-12 text-gray-300" />
+                </div>
+                <h2 className="text-2xl font-bold text-black">Welcome, {user.displayName}!</h2>
+                <p className="text-gray-500 mt-2 max-w-xs mx-auto">Search for your friends using their username to start chatting.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
