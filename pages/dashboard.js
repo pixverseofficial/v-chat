@@ -5,143 +5,169 @@ import { auth, db } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/router';
 import { 
-  Search, 
-  LogOut, 
-  MessageCircle, 
-  User, 
-  Settings, 
-  MoreVertical,
-  PlusCircle
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  addDoc, 
+  doc, 
+  setDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  Search, LogOut, MessageCircle, User, Settings, MoreVertical, PlusCircle, UserPlus, Check 
 } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('chats');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // ലോഗിൻ ചെയ്തിട്ടില്ലെങ്കിൽ തിരിച്ചയക്കുക
   useEffect(() => {
-    if (!user) {
-      router.push('/login');
-    }
+    if (!user) router.push('/login');
   }, [user, router]);
 
-  const handleLogout = async () => {
+  // --- Search Users Logic ---
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchQuery) return;
+    setLoading(true);
+    
     try {
-      await signOut(auth);
-      router.push('/');
+      const q = query(
+        collection(db, "users"), 
+        where("username", "==", searchQuery)
+      );
+      const querySnapshot = await getDocs(q);
+      const users = [];
+      querySnapshot.forEach((doc) => {
+        if (doc.id !== user.uid) { // സ്വന്തം പ്രൊഫൈൽ കാണിക്കരുത്
+          users.push({ id: doc.id, ...doc.data() });
+        }
+      });
+      setSearchResults(users);
     } catch (error) {
-      console.error("Error signing out: ", error);
+      console.error("Search error:", error);
+    }
+    setLoading(false);
+  };
+
+  // --- Send Friend Request Logic ---
+  const sendRequest = async (targetUser) => {
+    try {
+      await addDoc(collection(db, "friendRequests"), {
+        senderId: user.uid,
+        senderName: user.displayName,
+        receiverId: targetUser.id,
+        receiverName: targetUser.username,
+        status: "pending",
+        timestamp: serverTimestamp()
+      });
+      alert("Request Sent to " + targetUser.username);
+      setSearchResults([]);
+      setSearchQuery('');
+    } catch (error) {
+      alert("Error sending request");
     }
   };
 
-  if (!user) return <div className="h-screen w-screen bg-[#F5F5F7]" />;
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.push('/');
+  };
+
+  if (!user) return null;
 
   return (
     <div className="flex h-screen bg-[#F5F5F7] overflow-hidden text-black font-sans">
-      <Head>
-        <title>V Chat | Dashboard</title>
-      </Head>
+      <Head><title>V Chat | Dashboard</title></Head>
 
-      {/* --- Sidebar (Apple Style) --- */}
+      {/* Sidebar */}
       <div className="w-20 md:w-80 border-r border-gray-200 bg-white/60 backdrop-blur-xl flex flex-col">
-        
-        {/* Top Header */}
         <div className="p-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold hidden md:block tracking-tight text-[#007AFF]">V Chat</h1>
-            <div className="w-10 h-10 bg-[#007AFF]/10 rounded-full flex items-center justify-center md:hidden">
-                <span className="text-[#007AFF] font-bold">V</span>
-            </div>
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-all text-gray-500">
-               <PlusCircle className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Search Bar */}
-          <div className="mt-6 relative hidden md:block">
+          <h1 className="text-2xl font-bold hidden md:block text-[#007AFF]">V Chat</h1>
+          
+          <form onSubmit={handleSearch} className="mt-6 relative hidden md:block">
             <Search className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
             <input 
               type="text" 
-              placeholder="Search chats" 
+              placeholder="Search username..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-gray-200/50 border-none py-2.5 pl-10 pr-4 rounded-xl focus:ring-2 focus:ring-[#007AFF] outline-none"
             />
-          </div>
+          </form>
         </div>
 
-        {/* Navigation Tabs */}
         <nav className="flex-1 px-3 space-y-1">
-          <button 
-            onClick={() => setActiveTab('chats')}
-            className={`w-full flex items-center p-3.5 rounded-2xl transition-all ${activeTab === 'chats' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}
-          >
+          <button onClick={() => setActiveTab('chats')} className={`w-full flex items-center p-3.5 rounded-2xl ${activeTab === 'chats' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}>
             <MessageCircle className="w-6 h-6 mx-auto md:mx-0 md:mr-3" />
             <span className="hidden md:block font-semibold">Messages</span>
           </button>
-          
-          <button 
-            onClick={() => setActiveTab('friends')}
-            className={`w-full flex items-center p-3.5 rounded-2xl transition-all ${activeTab === 'friends' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}
-          >
+          <button onClick={() => setActiveTab('friends')} className={`w-full flex items-center p-3.5 rounded-2xl ${activeTab === 'friends' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}>
             <User className="w-6 h-6 mx-auto md:mx-0 md:mr-3" />
             <span className="hidden md:block font-semibold">Friends</span>
           </button>
-
-          <button 
-            onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center p-3.5 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}
-          >
-            <Settings className="w-6 h-6 mx-auto md:mx-0 md:mr-3" />
-            <span className="hidden md:block font-semibold">Settings</span>
-          </button>
         </nav>
 
-        {/* User Profile Card */}
         <div className="p-4 mb-2">
-          <div className="flex items-center p-3 rounded-2xl bg-white/80 border border-white shadow-sm overflow-hidden">
-            <div className="w-10 h-10 min-w-[40px] bg-gradient-to-tr from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-inner">
-              {user?.displayName?.charAt(0) || user?.email?.charAt(0).toUpperCase()}
-            </div>
+          <div className="flex items-center p-3 rounded-2xl bg-white border border-white shadow-sm overflow-hidden">
+            <div className="w-10 h-10 min-w-[40px] bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">{user?.displayName?.charAt(0)}</div>
             <div className="ml-3 flex-1 overflow-hidden hidden md:block">
-              <p className="text-sm font-bold truncate text-black">{user?.displayName || 'User'}</p>
-              <p className="text-[10px] text-green-500 font-semibold uppercase tracking-wider">Online</p>
+              <p className="text-sm font-bold truncate">{user?.displayName}</p>
+              <p className="text-[10px] text-green-500 font-bold uppercase">Online</p>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="p-2 hover:bg-red-50 text-red-500 rounded-xl transition-all hidden md:block"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            <button onClick={handleLogout} className="p-2 text-red-500 md:block hidden"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
       </div>
 
-      {/* --- Main Content Area --- */}
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col bg-white/40">
-        
-        {/* Header of Content Area */}
         <div className="h-20 border-b border-gray-100 flex items-center justify-between px-8 bg-white/30 backdrop-blur-md">
-            <h2 className="text-xl font-bold text-gray-800 uppercase tracking-wide">
-                {activeTab}
-            </h2>
-            <button className="p-2 hover:bg-gray-100 rounded-full text-gray-400">
-                <MoreVertical className="w-6 h-6" />
-            </button>
+            <h2 className="text-xl font-bold text-gray-800 uppercase tracking-wide">{activeTab}</h2>
         </div>
 
-        {/* Empty State / Welcome Screen */}
-        <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-          <div className="w-24 h-24 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-6 shadow-sm border border-white">
-             <MessageCircle className="w-12 h-12 text-gray-300" />
-          </div>
-          <h2 className="text-2xl font-bold text-black tracking-tight">Select a Chat</h2>
-          <p className="text-gray-500 mt-2 max-w-xs mx-auto leading-relaxed">
-            Choose a friend from the left sidebar or search to start a new conversation.
-          </p>
-          <button className="mt-8 px-6 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-semibold text-gray-600 shadow-sm hover:shadow-md transition-all">
-            Find People
-          </button>
+        {/* Search Results Area */}
+        <div className="p-8">
+          {searchResults.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Search Results</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {searchResults.map((result) => (
+                  <div key={result.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold">{result.username.charAt(0)}</div>
+                      <div className="ml-4 text-left">
+                        <p className="font-bold text-black">{result.username}</p>
+                        <p className="text-xs text-gray-400">V Chat User</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => sendRequest(result)}
+                      className="p-3 bg-[#007AFF] text-white rounded-2xl hover:scale-105 transition-all"
+                    >
+                      <UserPlus className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {searchResults.length === 0 && (
+            <div className="flex flex-col items-center justify-center mt-20 text-center">
+              <div className="w-24 h-24 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-6 shadow-sm">
+                <MessageCircle className="w-12 h-12 text-gray-300" />
+              </div>
+              <h2 className="text-2xl font-bold text-black">Welcome, {user.displayName}!</h2>
+              <p className="text-gray-500 mt-2 max-w-xs mx-auto">Search for your friends using their username to start chatting.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
