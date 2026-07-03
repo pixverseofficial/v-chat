@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #F5F5F7;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-2xl border border-white/20 shadow-2xl;
+  }
+  
+  .apple-button {
+    @apply bg-[#007AFF] text-white px-6 py-2.5 rounded-full font-medium 
+           active:scale-95 transition-all duration-200 hover:bg-[#0062CC] shadow-md shadow-blue-500/20;
+  }
+}
