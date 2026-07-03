@@ -12,7 +12,9 @@ import {
   addDoc, 
   doc, 
   setDoc,
-  serverTimestamp 
+  updateDoc,
+  serverTimestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { 
   Search, LogOut, MessageCircle, User, Settings, MoreVertical, PlusCircle, UserPlus, Check 
@@ -25,10 +27,32 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]);
 
   useEffect(() => {
     if (!user) router.push('/login');
   }, [user, router]);
+
+  // --- Real-time Friend Requests Listener ---
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "friendRequests"),
+      where("receiverId", "==", user.uid),
+      where("status", "==", "pending")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const reqs = [];
+      snapshot.forEach((doc) => {
+        reqs.push({ id: doc.id, ...doc.data() });
+      });
+      setPendingRequests(reqs);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // --- Search Users Logic ---
   const handleSearch = async (e) => {
@@ -44,7 +68,7 @@ export default function Dashboard() {
       const querySnapshot = await getDocs(q);
       const users = [];
       querySnapshot.forEach((doc) => {
-        if (doc.id !== user.uid) { // സ്വന്തം പ്രൊഫൈൽ കാണിക്കരുത്
+        if (doc.id !== user.uid) {
           users.push({ id: doc.id, ...doc.data() });
         }
       });
@@ -71,6 +95,30 @@ export default function Dashboard() {
       setSearchQuery('');
     } catch (error) {
       alert("Error sending request");
+    }
+  };
+
+  // --- Accept Friend Request Logic ---
+  const acceptRequest = async (request) => {
+    try {
+      // 1. Update request status to "accepted"
+      await updateDoc(doc(db, "friendRequests", request.id), {
+        status: "accepted"
+      });
+
+      // 2. Add both users to friends collection
+      await addDoc(collection(db, "friends"), {
+        user1: request.senderId,
+        user2: request.receiverId,
+        user1Name: request.senderName,
+        user2Name: request.receiverName,
+        timestamp: serverTimestamp()
+      });
+
+      alert("Friend Request Accepted!");
+    } catch (error) {
+      console.error("Error accepting request:", error);
+      alert("Error accepting request");
     }
   };
 
@@ -132,7 +180,36 @@ export default function Dashboard() {
         </div>
 
         {/* Search Results Area */}
-        <div className="p-8">
+        <div className="p-8 overflow-y-auto flex-1">
+          {/* Pending Requests Section */}
+          {pendingRequests.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Friend Requests ({pendingRequests.length})</h3>
+              <div className="space-y-3">
+                {pendingRequests.map((request) => (
+                  <div key={request.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className="w-12 h-12 bg-purple-200 rounded-full flex items-center justify-center font-bold text-purple-600">
+                        {request.senderName?.charAt(0) || '?'}
+                      </div>
+                      <div className="ml-4 text-left">
+                        <p className="font-bold text-black">{request.senderName}</p>
+                        <p className="text-xs text-gray-400">Sent you a friend request</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => acceptRequest(request)}
+                      className="p-3 bg-green-500 text-white rounded-2xl hover:scale-105 transition-all"
+                    >
+                      <Check className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Search Results */}
           {searchResults.length > 0 && (
             <div className="mb-8">
               <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Search Results</h3>
@@ -159,7 +236,7 @@ export default function Dashboard() {
           )}
 
           {/* Empty State */}
-          {searchResults.length === 0 && (
+          {searchResults.length === 0 && pendingRequests.length === 0 && (
             <div className="flex flex-col items-center justify-center mt-20 text-center">
               <div className="w-24 h-24 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-6 shadow-sm">
                 <MessageCircle className="w-12 h-12 text-gray-300" />
