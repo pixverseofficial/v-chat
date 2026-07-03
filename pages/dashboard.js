@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [selectedChat, setSelectedChat] = useState(null); // New state for selected chat
 
   useEffect(() => {
     if (!user) router.push('/login');
@@ -210,6 +211,11 @@ export default function Dashboard() {
       <div className="flex-1 flex flex-col bg-white/40 overflow-y-auto">
         <div className="h-20 border-b border-gray-100 flex items-center px-8 bg-white/30 backdrop-blur-md">
             <h2 className="text-xl font-bold text-gray-800 uppercase">{activeTab}</h2>
+            {selectedChat && (
+              <span className="ml-4 text-sm text-[#007AFF] font-medium">
+                Chatting with {getFriendName(selectedChat)}
+              </span>
+            )}
         </div>
 
         <div className="p-8">
@@ -236,7 +242,15 @@ export default function Dashboard() {
                   friends.map(f => (
                     <div key={f.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
                       <span className="font-bold">{getFriendName(f)}</span>
-                      <MessageCircle className="text-[#007AFF]" />
+                      <button 
+                        onClick={() => {
+                          setSelectedChat(f);
+                          setActiveTab('chats');
+                        }}
+                        className="p-2 bg-[#007AFF] text-white rounded-xl hover:scale-105 transition-all"
+                      >
+                        <MessageCircle className="w-5 h-5" />
+                      </button>
                     </div>
                   ))
                 )}
@@ -244,14 +258,28 @@ export default function Dashboard() {
             </div>
           )}
 
-          {activeTab === 'chats' && searchResults.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {searchResults.map(res => (
-                <div key={res.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
-                  <span className="font-bold">{res.username}</span>
-                  <button onClick={() => sendRequest(res)} className="p-2 bg-[#007AFF] text-white rounded-xl hover:scale-105 transition-all"><UserPlus /></button>
+          {activeTab === 'chats' && (
+            <div>
+              {selectedChat ? (
+                <div className="glass-card p-6 rounded-3xl">
+                  <h3 className="text-xl font-bold mb-4">
+                    Chat with {getFriendName(selectedChat)}
+                  </h3>
+                  <div className="min-h-[300px] flex items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      <MessageCircle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p>Chat interface coming soon...</p>
+                      <p className="text-sm mt-2">Messages will appear here</p>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div className="glass-card p-12 rounded-3xl text-center">
+                  <MessageCircle className="w-20 h-20 mx-auto text-gray-300 mb-6" />
+                  <h3 className="text-2xl font-bold text-gray-700">Select a friend to chat</h3>
+                  <p className="text-gray-400 mt-2">Go to Friends tab and click the message icon</p>
+                </div>
+              )}
             </div>
           )}
         </div>
