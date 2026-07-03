@@ -18,6 +18,7 @@ import {
 import { 
   Search, LogOut, MessageCircle, User, Settings, PlusCircle, UserPlus, Check, Users 
 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -84,9 +85,11 @@ export default function Dashboard() {
       setSearchResults(results);
     } catch (error) {
       console.error(error);
+      toast.error("Search failed");
     }
   };
 
+  // --- Send Friend Request Logic with Toast ---
   const sendRequest = async (targetUser) => {
     try {
       await addDoc(collection(db, "friendRequests"), {
@@ -97,14 +100,15 @@ export default function Dashboard() {
         status: "pending",
         timestamp: serverTimestamp()
       });
-      alert("Request Sent!");
+      toast.success(`Request sent to ${targetUser.username}`);
       setSearchResults([]);
       setSearchQuery('');
     } catch (error) {
-      alert("Error sending request");
+      toast.error("Error sending request");
     }
   };
 
+  // --- Accept Friend Request Logic with Toast ---
   const acceptRequest = async (request) => {
     try {
       const requestRef = doc(db, "friendRequests", request.id);
@@ -117,10 +121,10 @@ export default function Dashboard() {
         user2Name: request.receiverName,
         timestamp: serverTimestamp()
       });
-      alert("Request Accepted!");
+      toast.success("You're now friends! 🤝");
     } catch (error) {
       console.error(error);
-      alert("Accept Error: " + error.message);
+      toast.error("Accept Error: " + error.message);
     }
   };
 
@@ -136,6 +140,34 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-[#F5F5F7] overflow-hidden text-black font-sans">
       <Head><title>V Chat | Dashboard</title></Head>
+      
+      {/* Toaster Component */}
+      <Toaster 
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            borderRadius: '12px',
+            padding: '16px',
+          },
+          success: {
+            duration: 3000,
+            style: {
+              background: '#22c55e',
+              color: '#fff',
+            },
+          },
+          error: {
+            duration: 4000,
+            style: {
+              background: '#ef4444',
+              color: '#fff',
+            },
+          },
+        }}
+      />
 
       <div className="w-20 md:w-80 border-r border-gray-200 bg-white/60 backdrop-blur-xl flex flex-col">
         <div className="p-6">
@@ -185,21 +217,29 @@ export default function Dashboard() {
             <div className="space-y-8">
               <section>
                 <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Requests</h3>
-                {pendingRequests.map(req => (
-                  <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
-                    <span className="font-bold">{req.senderName}</span>
-                    <button onClick={() => acceptRequest(req)} className="p-2 bg-green-500 text-white rounded-xl"><Check /></button>
-                  </div>
-                ))}
+                {pendingRequests.length === 0 ? (
+                  <p className="text-gray-400 italic">No pending requests</p>
+                ) : (
+                  pendingRequests.map(req => (
+                    <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
+                      <span className="font-bold">{req.senderName}</span>
+                      <button onClick={() => acceptRequest(req)} className="p-2 bg-green-500 text-white rounded-xl hover:scale-105 transition-all"><Check /></button>
+                    </div>
+                  ))
+                )}
               </section>
               <section>
                 <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Friends ({friends.length})</h3>
-                {friends.map(f => (
-                  <div key={f.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
-                    <span className="font-bold">{getFriendName(f)}</span>
-                    <MessageCircle className="text-[#007AFF]" />
-                  </div>
-                ))}
+                {friends.length === 0 ? (
+                  <p className="text-gray-400 italic">No friends yet</p>
+                ) : (
+                  friends.map(f => (
+                    <div key={f.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
+                      <span className="font-bold">{getFriendName(f)}</span>
+                      <MessageCircle className="text-[#007AFF]" />
+                    </div>
+                  ))
+                )}
               </section>
             </div>
           )}
@@ -209,7 +249,7 @@ export default function Dashboard() {
               {searchResults.map(res => (
                 <div key={res.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
                   <span className="font-bold">{res.username}</span>
-                  <button onClick={() => sendRequest(res)} className="p-2 bg-[#007AFF] text-white rounded-xl"><UserPlus /></button>
+                  <button onClick={() => sendRequest(res)} className="p-2 bg-[#007AFF] text-white rounded-xl hover:scale-105 transition-all"><UserPlus /></button>
                 </div>
               ))}
             </div>
