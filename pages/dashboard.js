@@ -17,7 +17,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { 
-  Search, LogOut, MessageCircle, User, Settings, MoreVertical, PlusCircle, UserPlus, Check 
+  Search, LogOut, MessageCircle, User, Settings, MoreVertical, PlusCircle, UserPlus, Check, Users 
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [friends, setFriends] = useState([]);
 
   useEffect(() => {
     if (!user) router.push('/login');
@@ -52,6 +53,60 @@ export default function Dashboard() {
     });
 
     return () => unsubscribe();
+  }, [user]);
+
+  // --- Real-time Friends List Listener ---
+  useEffect(() => {
+    if (!user) return;
+
+    // Query where user is user1
+    const q1 = query(
+      collection(db, "friends"),
+      where("user1", "==", user.uid)
+    );
+
+    // Query where user is user2
+    const q2 = query(
+      collection(db, "friends"),
+      where("user2", "==", user.uid)
+    );
+
+    const unsubscribe1 = onSnapshot(q1, (snapshot) => {
+      const friendsList1 = [];
+      snapshot.forEach((doc) => {
+        friendsList1.push({ id: doc.id, ...doc.data() });
+      });
+      
+      // Merge with existing friends from q2
+      setFriends(prev => {
+        // Keep only unique friends based on id
+        const allFriends = [...friendsList1, ...prev.filter(f => 
+          friendsList1.some(f1 => f1.id === f.id)
+        )];
+        return allFriends;
+      });
+    });
+
+    const unsubscribe2 = onSnapshot(q2, (snapshot) => {
+      const friendsList2 = [];
+      snapshot.forEach((doc) => {
+        friendsList2.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setFriends(prev => {
+        // Merge both lists and remove duplicates
+        const allFriends = [...prev, ...friendsList2];
+        const uniqueFriends = allFriends.filter((friend, index, self) => 
+          index === self.findIndex(f => f.id === friend.id)
+        );
+        return uniqueFriends;
+      });
+    });
+
+    return () => {
+      unsubscribe1();
+      unsubscribe2();
+    };
   }, [user]);
 
   // --- Search Users Logic ---
@@ -129,6 +184,15 @@ export default function Dashboard() {
 
   if (!user) return null;
 
+  // Helper function to get friend's name
+  const getFriendName = (friend) => {
+    if (friend.user1 === user.uid) {
+      return friend.user2Name;
+    } else {
+      return friend.user1Name;
+    }
+  };
+
   return (
     <div className="flex h-screen bg-[#F5F5F7] overflow-hidden text-black font-sans">
       <Head><title>V Chat | Dashboard</title></Head>
@@ -182,38 +246,68 @@ export default function Dashboard() {
         {/* Friends Tab Content */}
         {activeTab === 'friends' && (
           <div className="flex-1 overflow-y-auto p-8">
-            <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Requests</h3>
-            {pendingRequests.length === 0 ? (
-              <div className="flex flex-col items-center justify-center mt-10 text-center">
-                <div className="w-20 h-20 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-4 shadow-sm">
-                  <User className="w-10 h-10 text-gray-300" />
-                </div>
-                <p className="text-gray-400 text-lg">No pending requests</p>
-                <p className="text-gray-300 text-sm">When someone sends you a friend request, it will appear here.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {pendingRequests.map((req) => (
-                  <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
-                        {req.senderName?.charAt(0) || '?'}
+            {/* Pending Requests Section */}
+            <div className="mb-8">
+              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Requests</h3>
+              {pendingRequests.length === 0 ? (
+                <p className="text-gray-400 italic text-sm">No pending requests</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingRequests.map((req) => (
+                    <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
+                          {req.senderName?.charAt(0) || '?'}
+                        </div>
+                        <div className="ml-4">
+                          <p className="font-bold text-black">{req.senderName}</p>
+                          <p className="text-xs text-gray-400">wants to be your friend</p>
+                        </div>
                       </div>
-                      <div className="ml-4">
-                        <p className="font-bold text-black">{req.senderName}</p>
-                        <p className="text-xs text-gray-400">wants to be your friend</p>
-                      </div>
+                      <button 
+                        onClick={() => acceptRequest(req)}
+                        className="px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold hover:bg-green-600 transition-all hover:scale-105"
+                      >
+                        Accept
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => acceptRequest(req)}
-                      className="px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold hover:bg-green-600 transition-all hover:scale-105"
-                    >
-                      Accept
-                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Friends List Section */}
+            <div>
+              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Your Friends ({friends.length})</h3>
+              {friends.length === 0 ? (
+                <div className="flex flex-col items-center justify-center mt-10 text-center">
+                  <div className="w-20 h-20 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-4 shadow-sm">
+                    <Users className="w-10 h-10 text-gray-300" />
                   </div>
-                ))}
-              </div>
-            )}
+                  <p className="text-gray-400 text-lg">No friends yet</p>
+                  <p className="text-gray-300 text-sm">Search for users and send them a friend request to connect.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {friends.map((friend) => (
+                    <div key={friend.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold text-lg">
+                          {getFriendName(friend)?.charAt(0) || '?'}
+                        </div>
+                        <div className="ml-4">
+                          <p className="font-bold text-black">{getFriendName(friend)}</p>
+                          <p className="text-xs text-gray-400">Friend</p>
+                        </div>
+                      </div>
+                      <button className="p-2 bg-[#007AFF] text-white rounded-xl hover:scale-105 transition-all">
+                        <MessageCircle className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
