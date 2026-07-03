@@ -11,13 +11,12 @@ import {
   getDocs, 
   addDoc, 
   doc, 
-  setDoc,
   updateDoc,
   serverTimestamp,
   onSnapshot
 } from 'firebase/firestore';
 import { 
-  Search, LogOut, MessageCircle, User, Settings, MoreVertical, PlusCircle, UserPlus, Check, Users 
+  Search, LogOut, MessageCircle, User, Settings, PlusCircle, UserPlus, Check, Users 
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -26,7 +25,6 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('chats');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [friends, setFriends] = useState([]);
 
@@ -34,107 +32,61 @@ export default function Dashboard() {
     if (!user) router.push('/login');
   }, [user, router]);
 
-  // --- Real-time Friend Requests Listener ---
+  // Real-time Friend Requests
   useEffect(() => {
     if (!user) return;
-
     const q = query(
       collection(db, "friendRequests"),
       where("receiverId", "==", user.uid),
       where("status", "==", "pending")
     );
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reqs = [];
-      snapshot.forEach((doc) => {
-        reqs.push({ id: doc.id, ...doc.data() });
-      });
-      setPendingRequests(reqs);
+      setPendingRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-
     return () => unsubscribe();
   }, [user]);
 
-  // --- Real-time Friends List Listener ---
+  // Real-time Friends List
   useEffect(() => {
     if (!user) return;
+    const q1 = query(collection(db, "friends"), where("user1", "==", user.uid));
+    const q2 = query(collection(db, "friends"), where("user2", "==", user.uid));
 
-    // Query where user is user1
-    const q1 = query(
-      collection(db, "friends"),
-      where("user1", "==", user.uid)
-    );
-
-    // Query where user is user2
-    const q2 = query(
-      collection(db, "friends"),
-      where("user2", "==", user.uid)
-    );
-
-    const unsubscribe1 = onSnapshot(q1, (snapshot) => {
-      const friendsList1 = [];
-      snapshot.forEach((doc) => {
-        friendsList1.push({ id: doc.id, ...doc.data() });
-      });
-      
-      // Merge with existing friends from q2
+    const unsub1 = onSnapshot(q1, (snapshot) => {
+      const list1 = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setFriends(prev => {
-        // Keep only unique friends based on id
-        const allFriends = [...friendsList1, ...prev.filter(f => 
-          friendsList1.some(f1 => f1.id === f.id)
-        )];
-        return allFriends;
+        const filtered = prev.filter(p => !list1.find(l => l.id === p.id));
+        return [...list1, ...filtered];
       });
     });
 
-    const unsubscribe2 = onSnapshot(q2, (snapshot) => {
-      const friendsList2 = [];
-      snapshot.forEach((doc) => {
-        friendsList2.push({ id: doc.id, ...doc.data() });
-      });
-      
+    const unsub2 = onSnapshot(q2, (snapshot) => {
+      const list2 = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setFriends(prev => {
-        // Merge both lists and remove duplicates
-        const allFriends = [...prev, ...friendsList2];
-        const uniqueFriends = allFriends.filter((friend, index, self) => 
-          index === self.findIndex(f => f.id === friend.id)
-        );
-        return uniqueFriends;
+        const filtered = prev.filter(p => !list2.find(l => l.id === p.id));
+        return [...list2, ...filtered];
       });
     });
 
-    return () => {
-      unsubscribe1();
-      unsubscribe2();
-    };
+    return () => { unsub1(); unsub2(); };
   }, [user]);
 
-  // --- Search Users Logic ---
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!searchQuery) return;
-    setLoading(true);
-    
     try {
-      const q = query(
-        collection(db, "users"), 
-        where("username", "==", searchQuery)
-      );
-      const querySnapshot = await getDocs(q);
-      const users = [];
-      querySnapshot.forEach((doc) => {
-        if (doc.id !== user.uid) {
-          users.push({ id: doc.id, ...doc.data() });
-        }
+      const q = query(collection(db, "users"), where("username", "==", searchQuery));
+      const snapshot = await getDocs(q);
+      const results = [];
+      snapshot.forEach(doc => {
+        if (doc.id !== user.uid) results.push({ id: doc.id, ...doc.data() });
       });
-      setSearchResults(users);
+      setSearchResults(results);
     } catch (error) {
-      console.error("Search error:", error);
+      console.error(error);
     }
-    setLoading(false);
   };
 
-  // --- Send Friend Request Logic ---
   const sendRequest = async (targetUser) => {
     try {
       await addDoc(collection(db, "friendRequests"), {
@@ -145,7 +97,7 @@ export default function Dashboard() {
         status: "pending",
         timestamp: serverTimestamp()
       });
-      alert("Request Sent to " + targetUser.username);
+      alert("Request Sent!");
       setSearchResults([]);
       setSearchQuery('');
     } catch (error) {
@@ -153,15 +105,11 @@ export default function Dashboard() {
     }
   };
 
-  // --- Accept Friend Request Logic ---
   const acceptRequest = async (request) => {
     try {
-      // 1. Update request status to "accepted"
-      await updateDoc(doc(db, "friendRequests", request.id), {
-        status: "accepted"
-      });
+      const requestRef = doc(db, "friendRequests", request.id);
+      await updateDoc(requestRef, { status: "accepted" });
 
-      // 2. Add both users to friends collection
       await addDoc(collection(db, "friends"), {
         user1: request.senderId,
         user2: request.receiverId,
@@ -169,11 +117,10 @@ export default function Dashboard() {
         user2Name: request.receiverName,
         timestamp: serverTimestamp()
       });
-
-      alert("Friend Request Accepted!");
+      alert("Request Accepted!");
     } catch (error) {
-      console.error("Error accepting request:", error);
-      alert("Error accepting request");
+      console.error(error);
+      alert("Accept Error: " + error.message);
     }
   };
 
@@ -182,176 +129,92 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  if (!user) return null;
+  const getFriendName = (f) => (f.user1 === user.uid ? f.user2Name : f.user1Name);
 
-  // Helper function to get friend's name
-  const getFriendName = (friend) => {
-    if (friend.user1 === user.uid) {
-      return friend.user2Name;
-    } else {
-      return friend.user1Name;
-    }
-  };
+  if (!user) return null;
 
   return (
     <div className="flex h-screen bg-[#F5F5F7] overflow-hidden text-black font-sans">
       <Head><title>V Chat | Dashboard</title></Head>
 
-      {/* Sidebar */}
       <div className="w-20 md:w-80 border-r border-gray-200 bg-white/60 backdrop-blur-xl flex flex-col">
         <div className="p-6">
           <h1 className="text-2xl font-bold hidden md:block text-[#007AFF]">V Chat</h1>
-          
           <form onSubmit={handleSearch} className="mt-6 relative hidden md:block">
             <Search className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
             <input 
               type="text" 
-              placeholder="Search username..." 
+              placeholder="Search username" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-gray-200/50 border-none py-2.5 pl-10 pr-4 rounded-xl focus:ring-2 focus:ring-[#007AFF] outline-none"
+              className="w-full bg-gray-200/50 border-none py-2.5 pl-10 pr-4 rounded-xl outline-none"
             />
           </form>
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
-          <button onClick={() => setActiveTab('chats')} className={`w-full flex items-center p-3.5 rounded-2xl ${activeTab === 'chats' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}>
+          <button onClick={() => setActiveTab('chats')} className={`w-full flex items-center p-3.5 rounded-2xl ${activeTab === 'chats' ? 'bg-[#007AFF] text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100'}`}>
             <MessageCircle className="w-6 h-6 mx-auto md:mx-0 md:mr-3" />
             <span className="hidden md:block font-semibold">Messages</span>
           </button>
-          <button onClick={() => setActiveTab('friends')} className={`w-full flex items-center p-3.5 rounded-2xl ${activeTab === 'friends' ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-100'}`}>
+          <button onClick={() => setActiveTab('friends')} className={`w-full flex items-center p-3.5 rounded-2xl ${activeTab === 'friends' ? 'bg-[#007AFF] text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100'}`}>
             <User className="w-6 h-6 mx-auto md:mx-0 md:mr-3" />
             <span className="hidden md:block font-semibold">Friends</span>
           </button>
         </nav>
 
         <div className="p-4 mb-2">
-          <div className="flex items-center p-3 rounded-2xl bg-white border border-white shadow-sm overflow-hidden">
+          <div className="flex items-center p-3 rounded-2xl bg-white border border-white shadow-sm">
             <div className="w-10 h-10 min-w-[40px] bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">{user?.displayName?.charAt(0)}</div>
             <div className="ml-3 flex-1 overflow-hidden hidden md:block">
               <p className="text-sm font-bold truncate">{user?.displayName}</p>
               <p className="text-[10px] text-green-500 font-bold uppercase">Online</p>
             </div>
-            <button onClick={handleLogout} className="p-2 text-red-500 md:block hidden"><LogOut className="w-5 h-5" /></button>
+            <button onClick={handleLogout} className="p-2 text-red-500 hidden md:block"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col bg-white/40">
-        <div className="h-20 border-b border-gray-100 flex items-center justify-between px-8 bg-white/30 backdrop-blur-md">
-            <h2 className="text-xl font-bold text-gray-800 uppercase tracking-wide">{activeTab}</h2>
+      <div className="flex-1 flex flex-col bg-white/40 overflow-y-auto">
+        <div className="h-20 border-b border-gray-100 flex items-center px-8 bg-white/30 backdrop-blur-md">
+            <h2 className="text-xl font-bold text-gray-800 uppercase">{activeTab}</h2>
         </div>
 
-        {/* Friends Tab Content */}
-        {activeTab === 'friends' && (
-          <div className="flex-1 overflow-y-auto p-8">
-            {/* Pending Requests Section */}
-            <div className="mb-8">
-              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Requests</h3>
-              {pendingRequests.length === 0 ? (
-                <p className="text-gray-400 italic text-sm">No pending requests</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {pendingRequests.map((req) => (
-                    <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
-                          {req.senderName?.charAt(0) || '?'}
-                        </div>
-                        <div className="ml-4">
-                          <p className="font-bold text-black">{req.senderName}</p>
-                          <p className="text-xs text-gray-400">wants to be your friend</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => acceptRequest(req)}
-                        className="px-4 py-2 bg-green-500 text-white rounded-xl text-sm font-bold hover:bg-green-600 transition-all hover:scale-105"
-                      >
-                        Accept
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Friends List Section */}
-            <div>
-              <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Your Friends ({friends.length})</h3>
-              {friends.length === 0 ? (
-                <div className="flex flex-col items-center justify-center mt-10 text-center">
-                  <div className="w-20 h-20 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-4 shadow-sm">
-                    <Users className="w-10 h-10 text-gray-300" />
+        <div className="p-8">
+          {activeTab === 'friends' && (
+            <div className="space-y-8">
+              <section>
+                <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Pending Requests</h3>
+                {pendingRequests.map(req => (
+                  <div key={req.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
+                    <span className="font-bold">{req.senderName}</span>
+                    <button onClick={() => acceptRequest(req)} className="p-2 bg-green-500 text-white rounded-xl"><Check /></button>
                   </div>
-                  <p className="text-gray-400 text-lg">No friends yet</p>
-                  <p className="text-gray-300 text-sm">Search for users and send them a friend request to connect.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {friends.map((friend) => (
-                    <div key={friend.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold text-lg">
-                          {getFriendName(friend)?.charAt(0) || '?'}
-                        </div>
-                        <div className="ml-4">
-                          <p className="font-bold text-black">{getFriendName(friend)}</p>
-                          <p className="text-xs text-gray-400">Friend</p>
-                        </div>
-                      </div>
-                      <button className="p-2 bg-[#007AFF] text-white rounded-xl hover:scale-105 transition-all">
-                        <MessageCircle className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                ))}
+              </section>
+              <section>
+                <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Friends ({friends.length})</h3>
+                {friends.map(f => (
+                  <div key={f.id} className="glass-card p-4 rounded-3xl flex items-center justify-between mb-3">
+                    <span className="font-bold">{getFriendName(f)}</span>
+                    <MessageCircle className="text-[#007AFF]" />
+                  </div>
+                ))}
+              </section>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Chats Tab Content (Search Results Area) */}
-        {activeTab === 'chats' && (
-          <div className="flex-1 overflow-y-auto p-8">
-            {/* Search Results */}
-            {searchResults.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-gray-400 text-sm font-bold mb-4 uppercase">Search Results</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {searchResults.map((result) => (
-                    <div key={result.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold">{result.username.charAt(0)}</div>
-                        <div className="ml-4 text-left">
-                          <p className="font-bold text-black">{result.username}</p>
-                          <p className="text-xs text-gray-400">V Chat User</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => sendRequest(result)}
-                        className="p-3 bg-[#007AFF] text-white rounded-2xl hover:scale-105 transition-all"
-                      >
-                        <UserPlus className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+          {activeTab === 'chats' && searchResults.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {searchResults.map(res => (
+                <div key={res.id} className="glass-card p-4 rounded-3xl flex items-center justify-between">
+                  <span className="font-bold">{res.username}</span>
+                  <button onClick={() => sendRequest(res)} className="p-2 bg-[#007AFF] text-white rounded-xl"><UserPlus /></button>
                 </div>
-              </div>
-            )}
-
-            {/* Empty State */}
-            {searchResults.length === 0 && (
-              <div className="flex flex-col items-center justify-center mt-20 text-center">
-                <div className="w-24 h-24 bg-gray-100/80 rounded-[30px] flex items-center justify-center mb-6 shadow-sm">
-                  <MessageCircle className="w-12 h-12 text-gray-300" />
-                </div>
-                <h2 className="text-2xl font-bold text-black">Welcome, {user.displayName}!</h2>
-                <p className="text-gray-500 mt-2 max-w-xs mx-auto">Search for your friends using their username to start chatting.</p>
-              </div>
-            )}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
