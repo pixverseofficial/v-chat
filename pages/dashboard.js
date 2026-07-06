@@ -33,13 +33,11 @@ export default function Dashboard() {
   useEffect(() => { if (!user) router.push('/login'); }, [user, router]);
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Real-time current user data
   useEffect(() => {
     if (!user) return;
     return onSnapshot(doc(db, "users", user.uid), (doc) => setCurrentUserData(doc.data()));
   }, [user]);
 
-  // Listen for Friends and Requests
   useEffect(() => {
     if (!user) return;
     const unsubReq = onSnapshot(query(collection(db, "friendRequests"), where("receiverId", "==", user.uid), where("status", "==", "pending")), (snap) => setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -47,22 +45,15 @@ export default function Dashboard() {
     const q2 = query(collection(db, "friends"), where("user2", "==", user.uid));
     const unsub1 = onSnapshot(q1, (snap) => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setFriends(prev => {
-        const others = prev.filter(p => !list.find(l => l.id === p.id));
-        return [...list, ...others];
-      });
+      setFriends(prev => [...list, ...prev.filter(p => !list.find(l => l.id === p.id))]);
     });
     const unsub2 = onSnapshot(q2, (snap) => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setFriends(prev => {
-        const others = prev.filter(p => !list.find(l => l.id === p.id));
-        return [...list, ...others];
-      });
+      setFriends(prev => [...prev, ...list.filter(p => !prev.find(l => l.id === p.id))]);
     });
     return () => { unsubReq(); unsub1(); unsub2(); };
   }, [user]);
 
-  // Messages Listener
   useEffect(() => {
     if (!selectedChat || !user) return;
     const friendId = selectedChat.user1 === user.uid ? selectedChat.user2 : selectedChat.user1;
@@ -101,109 +92,80 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen w-full bg-[#f4f7fb] flex overflow-hidden font-sans text-slate-700 relative">
-      <Head><title>V Chat | Official</title></Head>
+      <Head><title>V Chat</title></Head>
       <Toaster position="top-right" />
 
-      {/* --- COLUMN 1: NAVIGATION (Left Sidebar) --- */}
-      <div className="w-20 bg-white border-r border-slate-200 flex flex-col items-center py-8 z-[60] shadow-sm">
-        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 mb-10">
+      {/* LEFT SIDEBAR */}
+      <div className="w-20 bg-white border-r border-slate-200 flex flex-col items-center py-8 z-[60]">
+        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg mb-10">
           <span className="text-white font-bold text-xl italic">V</span>
         </div>
-        
         <div className="flex flex-col gap-8 flex-1">
-          <button onClick={() => setActiveTab('chats')} className={`p-3 rounded-xl transition-all ${activeTab === 'chats' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><MessageSquare /></button>
-          <button onClick={() => setActiveTab('friends')} className={`p-3 rounded-xl transition-all relative ${activeTab === 'friends' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Users />{pendingRequests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}</button>
-          <button onClick={() => setActiveTab('explore')} className={`p-3 rounded-xl transition-all ${activeTab === 'explore' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Compass /></button>
+          <button onClick={() => {setActiveTab('chats'); setSelectedChat(null);}} className={`p-3 rounded-xl transition-all ${activeTab === 'chats' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><MessageSquare /></button>
+          <button onClick={() => {setActiveTab('friends'); setSelectedChat(null);}} className={`p-3 rounded-xl transition-all relative ${activeTab === 'friends' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Users />{pendingRequests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}</button>
+          <button onClick={() => {setActiveTab('explore'); setSelectedChat(null);}} className={`p-3 rounded-xl transition-all ${activeTab === 'explore' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Compass /></button>
           <button onClick={() => setIsSettingsOpen(true)} className="p-3 rounded-xl text-slate-400 hover:text-blue-600"><Settings /></button>
         </div>
-
-        <button onClick={() => signOut(auth)} className="p-3 text-slate-400 hover:text-red-500 transition-all border-t pt-6"><LogOut /></button>
+        <button onClick={() => signOut(auth)} className="p-3 text-slate-400 hover:text-red-500 mt-auto border-t pt-6"><LogOut /></button>
       </div>
 
-      {/* --- COLUMN 2: LIST AREA (Middle) --- */}
-      <div className="w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col z-50">
+      {/* MIDDLE LIST */}
+      <div className="w-96 bg-white border-r border-slate-200 flex flex-col z-50">
         <div className="p-6">
-          <h2 className="text-xl font-bold text-slate-800 mb-6 uppercase tracking-tight">
-            {activeTab === 'chats' ? 'Recent Chats' : activeTab === 'friends' ? 'Contacts' : 'Explore'}
-          </h2>
+          <h2 className="text-xl font-bold text-slate-800 mb-6 uppercase tracking-tight">{activeTab === 'chats' ? 'Chats' : activeTab === 'friends' ? 'Contacts' : 'Explore'}</h2>
           <div className="relative">
             <Search className="absolute left-3 top-3 text-slate-400 w-4 h-4" />
-            <form onSubmit={handleSearch}>
-              <input type="text" placeholder="Search people..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-100 border-none py-2.5 pl-10 pr-4 rounded-xl text-sm outline-none" />
-            </form>
+            <form onSubmit={handleSearch}><input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-100 border-none py-2.5 pl-10 pr-4 rounded-xl text-sm outline-none" /></form>
           </div>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-6">
-          {/* SEARCH RESULTS */}
+        <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-1">
           {activeTab === 'explore' && searchResults.map(res => (
             <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-2">
-               <span className="font-bold text-sm">{res.username}</span>
-               <button onClick={() => { addDoc(collection(db, "friendRequests"), { senderId: user.uid, senderName: user.displayName, receiverId: res.id, receiverName: res.username, status: "pending", timestamp: serverTimestamp() }); toast.success("Request sent!"); setSearchResults([]); }} className="p-2 bg-blue-600 text-white rounded-lg"><UserPlus className="w-4 h-4"/></button>
+               <span className="font-bold text-sm text-slate-700">{res.username}</span>
+               <button onClick={() => { addDoc(collection(db, "friendRequests"), { senderId: user.uid, senderName: user.displayName, receiverId: res.id, receiverName: res.username, status: "pending", timestamp: serverTimestamp() }); toast.success("Sent!"); setSearchResults([]); }} className="p-2 bg-blue-600 text-white rounded-lg"><UserPlus className="w-4 h-4"/></button>
             </div>
           ))}
-
-          {/* FRIENDS LIST */}
           {(activeTab === 'chats' || activeTab === 'friends') && friends.map(f => (
-            <div key={f.id} onClick={() => { setSelectedChat(f); setActiveTab('chats'); }} className={`flex items-center p-3 rounded-2xl cursor-pointer mb-1 transition-all ${selectedChat?.id === f.id ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-50'}`}>
-              <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center font-bold bg-slate-100 text-blue-600 border-2 border-white shadow-sm">
-                {getFriendPhoto(f) ? <img src={getFriendPhoto(f)} className="w-full h-full object-cover" /> : getFriendName(f).charAt(0)}
-              </div>
-              <div className="ml-4 flex-1">
-                <p className="font-bold text-sm leading-tight">{getFriendName(f)}</p>
-                <p className={`text-[10px] mt-1 font-bold ${selectedChat?.id === f.id ? 'text-blue-100' : 'text-green-500'}`}>ONLINE</p>
-              </div>
+            <div key={f.id} onClick={() => { setSelectedChat(f); setActiveTab('chats'); }} className={`flex items-center p-3 rounded-2xl cursor-pointer mb-1 transition-all ${selectedChat?.id === f.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-50'}`}>
+              <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center font-bold bg-slate-100 text-blue-600 border-2 border-white">{getFriendPhoto(f) ? <img src={getFriendPhoto(f)} className="w-full h-full object-cover" /> : getFriendName(f).charAt(0)}</div>
+              <div className="ml-4 flex-1"><p className="font-bold text-sm leading-tight">{getFriendName(f)}</p><p className={`text-[10px] mt-1 font-bold ${selectedChat?.id === f.id ? 'text-blue-100' : 'text-green-500'}`}>ONLINE</p></div>
             </div>
           ))}
-
-          {/* REQUESTS */}
           {activeTab === 'friends' && pendingRequests.map(r => (
              <div key={r.id} className="bg-blue-50 p-4 rounded-2xl flex items-center justify-between mt-4 border border-blue-100">
                 <span className="font-bold text-xs">{r.senderName}</span>
-                <button onClick={() => { updateDoc(doc(db, "friendRequests", r.id), { status: "accepted" }); addDoc(collection(db, "friends"), { user1: r.senderId, user2: r.receiverId, user1Name: r.senderName, user2Name: r.receiverName, timestamp: serverTimestamp() }); toast.success("Added!"); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold">ACCEPT</button>
+                <button onClick={() => { updateDoc(doc(db, "friendRequests", r.id), { status: "accepted" }); addDoc(collection(db, "friends"), { user1: r.senderId, user2: r.receiverId, user1Name: r.senderName, user2Name: r.receiverName, timestamp: serverTimestamp() }); toast.success("Accepted!"); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold">ACCEPT</button>
              </div>
           ))}
         </div>
       </div>
 
-      {/* --- COLUMN 3: CHAT AREA (Right) --- */}
+      {/* RIGHT CHAT */}
       <div className="flex-1 bg-white flex flex-col relative z-40">
         {selectedChat && activeTab === 'chats' ? (
           <>
-            <div className="h-20 border-b border-slate-100 flex items-center justify-between px-8 bg-white/90 backdrop-blur-md">
+            <div className="h-20 border-b border-slate-100 flex items-center justify-between px-8 bg-white/90">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center text-blue-600 font-bold">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center text-blue-600 font-bold border border-slate-200">
                    {getFriendPhoto(selectedChat) ? <img src={getFriendPhoto(selectedChat)} className="w-full h-full object-cover" /> : getFriendName(selectedChat).charAt(0)}
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-sm leading-none">{getFriendName(selectedChat)}</h3>
-                  <div className="flex items-center gap-1 mt-1.5"><div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Active</span></div>
-                </div>
+                <div><h3 className="font-bold text-slate-800 text-sm leading-none">{getFriendName(selectedChat)}</h3><div className="flex items-center gap-1 mt-1.5"><div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Active</span></div></div>
               </div>
-              <div className="flex items-center gap-5 text-slate-400">
-                <button className="hover:text-blue-600"><Phone className="w-5 h-5" /></button>
-                <button className="hover:text-blue-600"><Video className="w-5 h-5" /></button>
-                <button className="hover:text-blue-600"><Info className="w-5 h-5" /></button>
-              </div>
+              <div className="flex items-center gap-5 text-slate-400"><button><Phone className="w-5 h-5" /></button><button><Video className="w-5 h-5" /></button><button><Info className="w-5 h-5" /></button></div>
             </div>
-
             <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-[#fcfdfe]">
-              {messages.map((msg) => {
-                const isMe = msg.senderId === user.uid;
-                return (
-                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-sm font-medium ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none'}`}>{msg.text}</div>
-                    <div className="flex items-center gap-1 mt-1 px-1 opacity-40 text-[9px] font-bold"><Clock className="w-2.5 h-2.5" />{formatTime(msg.timestamp)}</div>
-                  </div>
-                );
-              })}
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex flex-col ${msg.senderId === user.uid ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-sm font-medium ${msg.senderId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none'}`}>{msg.text}</div>
+                  <div className="flex items-center gap-1 mt-1 px-1 opacity-40 text-[9px] font-bold"><Clock className="w-2.5 h-2.5" />{formatTime(msg.timestamp)}</div>
+                </div>
+              ))}
               <div ref={scrollRef} />
             </div>
-
             <div className="p-6 bg-white border-t border-slate-100">
-              <form onSubmit={sendMessage} className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+              <form onSubmit={sendMessage} className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border">
                 <button type="button" className="p-2 text-slate-400 hover:text-blue-600"><PlusCircle className="w-6 h-6" /></button>
-                <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-transparent border-none py-2 text-sm outline-none text-slate-700" />
+                <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-transparent border-none py-2 text-sm outline-none" />
                 <button type="submit" className="bg-blue-600 p-3 rounded-xl text-white shadow-lg"><Send className="w-5 h-5" /></button>
               </form>
             </div>
@@ -216,7 +178,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* --- SETTINGS MODAL --- */}
+      {/* SETTINGS MODAL */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 relative shadow-2xl">
@@ -243,7 +205,7 @@ export default function Dashboard() {
                 {uploading && <div className="absolute inset-0 bg-white/80 rounded-full flex items-center justify-center text-xs font-black text-blue-600 animate-pulse">UPLOADING...</div>}
               </div>
               <p className="text-2xl font-black text-slate-800 uppercase italic">{user?.displayName}</p>
-              <button onClick={() => setIsSettingsOpen(false)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold">CLOSE</button>
+              <button onClick={() => setIsSettingsOpen(false)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-xl shadow-blue-100">CLOSE</button>
             </div>
           </div>
         </div>
