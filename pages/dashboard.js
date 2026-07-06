@@ -74,10 +74,12 @@ export default function Dashboard() {
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!searchQuery) return;
-    const q = query(collection(db, "users"), where("username", "==", searchQuery));
-    const snap = await getDocs(q);
-    setSearchResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== user.uid));
-    setActiveTab('explore');
+    try {
+      const q = query(collection(db, "users"), where("username", "==", searchQuery));
+      const snap = await getDocs(q);
+      setSearchResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== user.uid));
+      setActiveTab('explore');
+    } catch (err) { toast.error("Search failed"); }
   };
 
   const sendMessage = async (e) => {
@@ -86,7 +88,9 @@ export default function Dashboard() {
     const friendId = selectedChat.user1 === user.uid ? selectedChat.user2 : selectedChat.user1;
     const chatId = [user.uid, friendId].sort().join('_');
     const msg = newMessage; setNewMessage('');
-    await addDoc(collection(db, "chats", chatId, "messages"), { text: msg, senderId: user.uid, timestamp: serverTimestamp() });
+    try {
+      await addDoc(collection(db, "chats", chatId, "messages"), { text: msg, senderId: user.uid, timestamp: serverTimestamp() });
+    } catch (err) { toast.error("Failed to send"); }
   };
 
   const getFriendName = (f) => (f.user1 === user.uid ? f.user2Name : f.user1Name);
@@ -97,50 +101,52 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen w-full bg-[#f4f7fb] flex overflow-hidden font-sans text-slate-700 relative">
-      <Head><title>V Chat</title></Head>
+      <Head><title>V Chat | Official</title></Head>
       <Toaster position="top-right" />
 
-      {/* --- SIDEBAR 1: NAVIGATION --- */}
-      <div className="w-20 bg-white border-r border-slate-200 flex flex-col items-center py-8 z-50 shadow-sm">
+      {/* --- COLUMN 1: NAVIGATION (Left Sidebar) --- */}
+      <div className="w-20 bg-white border-r border-slate-200 flex flex-col items-center py-8 z-[60] shadow-sm">
         <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 mb-10">
           <span className="text-white font-bold text-xl italic">V</span>
         </div>
         
         <div className="flex flex-col gap-8 flex-1">
-          <button onClick={() => {setActiveTab('chats'); setSelectedChat(null);}} title="Messages" className={`p-3 rounded-xl transition-all ${activeTab === 'chats' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><MessageSquare /></button>
-          <button onClick={() => {setActiveTab('friends'); setSelectedChat(null);}} title="Friends" className={`p-3 rounded-xl transition-all relative ${activeTab === 'friends' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Users />{pendingRequests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}</button>
-          <button onClick={() => {setActiveTab('explore'); setSelectedChat(null);}} title="Search" className={`p-3 rounded-xl transition-all ${activeTab === 'explore' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Compass /></button>
-          <button onClick={() => setIsSettingsOpen(true)} title="Settings" className="p-3 rounded-xl text-slate-400 hover:text-blue-600"><Settings /></button>
+          <button onClick={() => setActiveTab('chats')} className={`p-3 rounded-xl transition-all ${activeTab === 'chats' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><MessageSquare /></button>
+          <button onClick={() => setActiveTab('friends')} className={`p-3 rounded-xl transition-all relative ${activeTab === 'friends' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Users />{pendingRequests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}</button>
+          <button onClick={() => setActiveTab('explore')} className={`p-3 rounded-xl transition-all ${activeTab === 'explore' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}><Compass /></button>
+          <button onClick={() => setIsSettingsOpen(true)} className="p-3 rounded-xl text-slate-400 hover:text-blue-600"><Settings /></button>
         </div>
 
         <button onClick={() => signOut(auth)} className="p-3 text-slate-400 hover:text-red-500 transition-all border-t pt-6"><LogOut /></button>
       </div>
 
-      {/* --- SIDEBAR 2: LIST AREA --- */}
-      <div className="w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col z-40 relative">
+      {/* --- COLUMN 2: LIST AREA (Middle) --- */}
+      <div className="w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col z-50">
         <div className="p-6">
           <h2 className="text-xl font-bold text-slate-800 mb-6 uppercase tracking-tight">
-            {activeTab === 'chats' ? 'Chats' : activeTab === 'friends' ? 'Contacts' : 'Explore'}
+            {activeTab === 'chats' ? 'Recent Chats' : activeTab === 'friends' ? 'Contacts' : 'Explore'}
           </h2>
           <div className="relative">
             <Search className="absolute left-3 top-3 text-slate-400 w-4 h-4" />
             <form onSubmit={handleSearch}>
-              <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-100 border-none py-2.5 pl-10 pr-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20" />
+              <input type="text" placeholder="Search people..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-100 border-none py-2.5 pl-10 pr-4 rounded-xl text-sm outline-none" />
             </form>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-1">
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
+          {/* SEARCH RESULTS */}
           {activeTab === 'explore' && searchResults.map(res => (
             <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-2">
-               <span className="font-bold text-sm text-slate-700">{res.username}</span>
+               <span className="font-bold text-sm">{res.username}</span>
                <button onClick={() => { addDoc(collection(db, "friendRequests"), { senderId: user.uid, senderName: user.displayName, receiverId: res.id, receiverName: res.username, status: "pending", timestamp: serverTimestamp() }); toast.success("Request sent!"); setSearchResults([]); }} className="p-2 bg-blue-600 text-white rounded-lg"><UserPlus className="w-4 h-4"/></button>
             </div>
           ))}
 
+          {/* FRIENDS LIST */}
           {(activeTab === 'chats' || activeTab === 'friends') && friends.map(f => (
-            <div key={f.id} onClick={() => { setSelectedChat(f); setActiveTab('chats'); }} className={`flex items-center p-3 rounded-2xl cursor-pointer transition-all ${selectedChat?.id === f.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'hover:bg-slate-50'}`}>
-              <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center font-bold bg-blue-100 text-blue-600 border border-white shadow-sm">
+            <div key={f.id} onClick={() => { setSelectedChat(f); setActiveTab('chats'); }} className={`flex items-center p-3 rounded-2xl cursor-pointer mb-1 transition-all ${selectedChat?.id === f.id ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-50'}`}>
+              <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center font-bold bg-slate-100 text-blue-600 border-2 border-white shadow-sm">
                 {getFriendPhoto(f) ? <img src={getFriendPhoto(f)} className="w-full h-full object-cover" /> : getFriendName(f).charAt(0)}
               </div>
               <div className="ml-4 flex-1">
@@ -150,22 +156,23 @@ export default function Dashboard() {
             </div>
           ))}
 
+          {/* REQUESTS */}
           {activeTab === 'friends' && pendingRequests.map(r => (
              <div key={r.id} className="bg-blue-50 p-4 rounded-2xl flex items-center justify-between mt-4 border border-blue-100">
                 <span className="font-bold text-xs">{r.senderName}</span>
-                <button onClick={() => { updateDoc(doc(db, "friendRequests", r.id), { status: "accepted" }); addDoc(collection(db, "friends"), { user1: r.senderId, user2: r.receiverId, user1Name: r.senderName, user2Name: r.receiverName, timestamp: serverTimestamp() }); toast.success("Accepted!"); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold">ACCEPT</button>
+                <button onClick={() => { updateDoc(doc(db, "friendRequests", r.id), { status: "accepted" }); addDoc(collection(db, "friends"), { user1: r.senderId, user2: r.receiverId, user1Name: r.senderName, user2Name: r.receiverName, timestamp: serverTimestamp() }); toast.success("Added!"); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold">ACCEPT</button>
              </div>
           ))}
         </div>
       </div>
 
-      {/* --- MAIN CONTENT: CHAT AREA --- */}
-      <div className="flex-1 bg-white flex flex-col relative z-30">
-        {selectedChat ? (
+      {/* --- COLUMN 3: CHAT AREA (Right) --- */}
+      <div className="flex-1 bg-white flex flex-col relative z-40">
+        {selectedChat && activeTab === 'chats' ? (
           <>
             <div className="h-20 border-b border-slate-100 flex items-center justify-between px-8 bg-white/90 backdrop-blur-md">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center text-blue-600 font-bold border border-slate-200">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center text-blue-600 font-bold">
                    {getFriendPhoto(selectedChat) ? <img src={getFriendPhoto(selectedChat)} className="w-full h-full object-cover" /> : getFriendName(selectedChat).charAt(0)}
                 </div>
                 <div>
@@ -185,7 +192,7 @@ export default function Dashboard() {
                 const isMe = msg.senderId === user.uid;
                 return (
                   <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-sm font-medium ${isMe ? 'bg-blue-600 text-white rounded-tr-none shadow-blue-100' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none'}`}>{msg.text}</div>
+                    <div className={`max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-sm font-medium ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none'}`}>{msg.text}</div>
                     <div className="flex items-center gap-1 mt-1 px-1 opacity-40 text-[9px] font-bold"><Clock className="w-2.5 h-2.5" />{formatTime(msg.timestamp)}</div>
                   </div>
                 );
@@ -196,8 +203,8 @@ export default function Dashboard() {
             <div className="p-6 bg-white border-t border-slate-100">
               <form onSubmit={sendMessage} className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
                 <button type="button" className="p-2 text-slate-400 hover:text-blue-600"><PlusCircle className="w-6 h-6" /></button>
-                <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Type your message here..." className="flex-1 bg-transparent border-none py-2 text-sm outline-none text-slate-700" />
-                <button type="submit" className="bg-blue-600 p-3 rounded-xl text-white shadow-lg hover:scale-105 transition-all"><Send className="w-5 h-5" /></button>
+                <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-transparent border-none py-2 text-sm outline-none text-slate-700" />
+                <button type="submit" className="bg-blue-600 p-3 rounded-xl text-white shadow-lg"><Send className="w-5 h-5" /></button>
               </form>
             </div>
           </>
@@ -236,7 +243,7 @@ export default function Dashboard() {
                 {uploading && <div className="absolute inset-0 bg-white/80 rounded-full flex items-center justify-center text-xs font-black text-blue-600 animate-pulse">UPLOADING...</div>}
               </div>
               <p className="text-2xl font-black text-slate-800 uppercase italic">{user?.displayName}</p>
-              <button onClick={() => setIsSettingsOpen(false)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-xl shadow-blue-100">CLOSE</button>
+              <button onClick={() => setIsSettingsOpen(false)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold">CLOSE</button>
             </div>
           </div>
         </div>
